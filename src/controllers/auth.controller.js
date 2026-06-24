@@ -1,5 +1,5 @@
 import userModel from "../models/user.model.js";
-import crypt from "crypto";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 import sessionModel from "../models/session.model.js";
@@ -15,12 +15,12 @@ export async function register(req,res){
     })
 
     if(isAlreadyRegistered){
-        res.status(409).json({
+        return res.status(409).json({
             message: "Username or email already exists"
         })
     }
 
-    const hashedPassword = crypt.createHash("sha256").update(password).digest("hex");
+    const hashedPassword = crypto.createHash("sha256").update(password).digest("hex");
 
     const user = await userModel.create({
         username,
@@ -28,7 +28,7 @@ export async function register(req,res){
         password: hashedPassword
     })
 
-    const refreshtoken = jwt.sign({
+    const refreshToken = jwt.sign({
         id : user._id
     }, config.JWT_SECRET, 
         {
@@ -36,7 +36,7 @@ export async function register(req,res){
         }
     )
 
-    const refreshTokenHash = crypt.createHash("sha256").update(refreshToken).digest("hex");
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
     const session = await sessionModel.create({
         user : user._id,
         refreshTokenHash,
@@ -45,7 +45,7 @@ export async function register(req,res){
 
     })
 
-    const accesstoken = jwt.sign({
+    const accessToken = jwt.sign({
         id : user._id,
         sessionId: session._id
     }, config.JWT_SECRET, 
@@ -54,11 +54,11 @@ export async function register(req,res){
         }
     )
     
-    res.cookie("refreshToken",refreshtoken, {
+    res.cookie("refreshToken",refreshToken, {
         httpOnly: true,
         secure: true,
         sameSite: "strict",
-        maxAge: 7*24*60*1000 // 7-days
+        maxAge: 7*24*60*60*1000 // 7-days
     })
 
     res.status(201).json({
@@ -66,7 +66,8 @@ export async function register(req,res){
         user: {
             username: user.username,
             email: user.email,
-        }, accesstoken
+        }, 
+        accessToken
     })
 }
 
@@ -83,13 +84,13 @@ export async function login(req,res){
 
     const hashedPassword = crypto.createHash("sha256").update(password).digest("hex");
 
-    if(!hashedPassword){
+    if(hashedPassword !== user.password){
         return res.status(401).json({
             message: "Invalid email or password"
         })
     }
 
-    const refreshtoken = jwt.sign({
+    const refreshToken = jwt.sign({
         id : user._id
     }, config.JWT_SECRET, 
         {
@@ -97,7 +98,7 @@ export async function login(req,res){
         }
     )
 
-    const refreshTokenHash = crypt.createHash("sha256").update(refreshToken).digest("hex");
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
     const session = await sessionModel.create({
         user : user._id,
         refreshTokenHash,
@@ -106,7 +107,7 @@ export async function login(req,res){
 
     })
 
-    const accesstoken = jwt.sign({
+    const accessToken = jwt.sign({
         id : user._id,
         sessionId: session._id
     }, config.JWT_SECRET, 
@@ -115,11 +116,11 @@ export async function login(req,res){
         }
     )
 
-    res.cookie("refreshToken",refreshtoken, {
+    res.cookie("refreshToken",refreshToken, {
         httpOnly: true,
         secure: true,
         sameSite: "strict",
-        maxAge: 7*24*60*1000 // 7-days
+        maxAge: 7*24*60*60*1000 // 7-days
     })
     
     res.status(200).json({
@@ -128,7 +129,7 @@ export async function login(req,res){
             username: user.username,
             email: user.email,
         },
-        accesstoken
+        accessToken
     })
     
 }
@@ -146,7 +147,7 @@ export async function getMe(req,res){
 
     const user = await userModel.findById(decoded.id)
 
-    res.send(200).json({
+    res.status(200).json({
         message: "user fetched successfully",
         user: {
             username: user.username,
@@ -167,7 +168,7 @@ export async function refreshToken(req,res) {
 
 
     // used to identify the session
-    const refreshTokeHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
     const session = await sessionModel.findOne({
         refreshTokenHash,
         revoked: false
@@ -206,7 +207,7 @@ export async function refreshToken(req,res) {
         httpOnly: true,
         secure: true,
         sameSite: "strict",
-        maxAge: 7*24*60*1000 //7days
+        maxAge: 7*24*60*60*1000 //7days
     })
     res.status(200).json({
         message: "Access token refreshed successfully",
@@ -271,4 +272,3 @@ export async function logoutAll(req,res) {
         message: "Logged out from all devices successfully"
     })
 }
-
